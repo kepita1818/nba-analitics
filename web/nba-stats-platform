@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NBA Stats Platform</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=clash-display@600,700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root, [data-theme="light"] {
+      --font-body: 'Satoshi', Inter, sans-serif;
+      --font-display: 'Clash Display', 'Satoshi', sans-serif;
+      --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+      --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+      --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+      --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+      --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem; --space-5: 1.25rem;
+      --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem; --space-16: 4rem;
+      --radius-sm: .375rem; --radius-md: .5rem; --radius-lg: .75rem; --radius-xl: 1rem; --radius-full: 9999px;
+      --color-bg: #f7f6f2; --color-surface: #f9f8f5; --color-surface-2: #fbfbf9; --color-surface-offset: #f3f0ec;
+      --color-border: #d4d1ca; --color-text: #28251d; --color-text-muted: #6f6b63; --color-text-faint: #9a968e;
+      --color-primary: #01696f; --color-primary-hover: #0c4e54; --color-blue: #006494; --color-success: #437a22;
+      --color-warning: #964219; --shadow-sm: 0 1px 2px rgba(0,0,0,.05); --shadow-md: 0 8px 24px rgba(0,0,0,.08);
+    }
+    [data-theme="dark"] {
+      --color-bg: #0b0d10; --color-surface: #12161b; --color-surface-2: #171c22; --color-surface-offset: #1c232b;
+      --color-border: #27303a; --color-text: #e8edf2; --color-text-muted: #9eabb8; --color-text-faint: #657180;
+      --color-primary: #4fc3c8; --color-primary-hover: #37a8ad; --color-blue: #5ca8ff; --color-success: #78d381;
+      --color-warning: #ffb15c; --shadow-sm: 0 1px 2px rgba(0,0,0,.25); --shadow-md: 0 16px 40px rgba(0,0,0,.28);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      background:
+        radial-gradient(circle at top right, rgba(79,195,200,.10), transparent 30%),
+        radial-gradient(circle at left bottom, rgba(92,168,255,.08), transparent 35%),
+        var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input, select { font: inherit; color: inherit; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+    .app-shell { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+    .sidebar {
+      position: sticky; top: 0; align-self: start; height: 100vh; padding: var(--space-6);
+      border-right: 1px solid var(--color-border); background: rgba(18,22,27,.88); backdrop-filter: blur(18px);
+    }
+    .brand { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-8); }
+    .logo {
+      width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-blue)); color: #061216;
+      box-shadow: var(--shadow-md);
+    }
+    .brand h1 { font-family: var(--font-display); font-size: 1.2rem; letter-spacing: .02em; }
+    .brand p { color: var(--color-text-muted); font-size: var(--text-xs); }
+    .nav-group { display: grid; gap: var(--space-2); }
+    .nav-btn {
+      width: 100%; text-align: left; padding: .9rem 1rem; border-radius: var(--radius-lg); border: 1px solid transparent;
+      background: transparent; color: var(--color-text-muted);
+    }
+    .nav-btn.active, .nav-btn:hover, .nav-btn:focus-visible { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
+    .sidebar-foot { margin-top: var(--space-8); padding-top: var(--space-6); border-top: 1px solid var(--color-border); display: grid; gap: var(--space-3); }
+    .main { padding: var(--space-6); display: grid; gap: var(--space-6); }
+    .topbar {
+      display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; align-items: center;
+      padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-xl);
+      background: rgba(18,22,27,.7); backdrop-filter: blur(16px);
+    }
+    .topbar h2 { font-family: var(--font-display); font-size: var(--text-xl); }
+    .topbar p { color: var(--color-text-muted); margin-top: .2rem; }
+    .topbar-actions, .filter-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+    .input, .select, .icon-btn {
+      height: 44px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-surface);
+    }
+    .input, .select { padding: 0 .9rem; min-width: 180px; }
+    .icon-btn { width: 44px; display: grid; place-items: center; }
+    .hero-grid, .kpi-grid, .content-grid, .detail-grid, .comparison-grid { display: grid; gap: var(--space-4); }
+    .hero-grid { grid-template-columns: 1.25fr .85fr; }
+    .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .content-grid { grid-template-columns: 1.35fr .9fr; }
+    .detail-grid, .comparison-grid { grid-template-columns: 1fr 1fr; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.02), transparent 100%), var(--color-surface);
+      border: 1px solid var(--color-border); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm);
+      padding: var(--space-5);
+    }
+    .card h3 { font-size: var(--text-lg); margin-bottom: var(--space-3); }
+    .eyebrow { color: var(--color-primary); text-transform: uppercase; letter-spacing: .12em; font-size: var(--text-xs); font-weight: 700; }
+    .hero-copy h3 { font-family: var(--font-display); font-size: clamp(2rem, 1.4rem + 2vw, 3.8rem); line-height: 1; margin: .5rem 0 1rem; }
+    .hero-copy p { color: var(--color-text-muted); max-width: 60ch; }
+    .hero-stats { display: grid; gap: var(--space-3); margin-top: var(--space-5); }
+    .hero-stat { display: flex; justify-content: space-between; padding: .9rem 1rem; border-radius: var(--radius-lg); background: var(--color-surface-2); border: 1px solid var(--color-border); }
+    .hero-panel { display: grid; gap: var(--space-3); }
+    .mini-chart-wrap { height: 220px; }
+    .kpi .label { color: var(--color-text-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; }
+    .kpi .value { font-size: clamp(1.6rem, 1.2rem + 1vw, 2.4rem); font-weight: 700; margin: .4rem 0; }
+    .kpi .sub { color: var(--color-text-muted); font-size: var(--text-sm); }
+    .table-wrap { overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 860px; }
+    th, td { padding: .85rem .75rem; border-bottom: 1px solid var(--color-border); text-align: left; font-size: var(--text-sm); }
+    th { color: var(--color-text-muted); font-weight: 700; position: sticky; top: 0; background: var(--color-surface); }
+    tbody tr:hover { background: var(--color-surface-2); }
+    .pill { display: inline-flex; align-items: center; gap: .45rem; padding: .32rem .65rem; border-radius: var(--radius-full); background: rgba(79,195,200,.12); color: var(--color-primary); font-size: var(--text-xs); font-weight: 700; }
+    .split-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+    .split-card { padding: .95rem; border-radius: var(--radius-lg); background: var(--color-surface-2); border: 1px solid var(--color-border); }
+    .split-card .name { color: var(--color-text-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; }
+    .split-card .num { font-size: 1.5rem; font-weight: 700; margin-top: .35rem; }
+    .section-title { display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; }
+    .muted { color: var(--color-text-muted); }
+    .list { display: grid; gap: var(--space-3); }
+    .list-item { padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-2); }
+    .player-meta { display: flex; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+    .player-meta strong { display: block; font-size: 1.15rem; }
+    .tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+    .tab-btn { padding:.7rem 1rem; border-radius: var(--radius-lg); border:1px solid var(--color-border); background:var(--color-surface-2); }
+    .tab-btn.active { background: rgba(79,195,200,.12); color: var(--color-primary); }
+    .hidden { display: none !important; }
+    .footer-note { color: var(--color-text-faint); font-size: var(--text-xs); }
+    .badge-row { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.75rem; }
+    .comparison-stat { padding:1rem; border-radius:var(--radius-lg); background:var(--color-surface-2); border:1px solid var(--color-border); }
+    .comparison-stat h4 { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: .35rem; }
+    .comparison-value { font-size: 1.6rem; font-weight: 700; }
+    .mobile-tabs { display: none; }
+    @media (max-width: 1100px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .hero-grid, .content-grid, .kpi-grid, .detail-grid, .comparison-grid, .split-grid { grid-template-columns: 1fr; }
+      .main { padding-bottom: 90px; }
+      .mobile-tabs {
+        position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: .5rem; padding: .75rem; background: rgba(11,13,16,.95); backdrop-filter: blur(18px); border-top: 1px solid var(--color-border);
+      }
+      .mobile-tabs button { min-height: 48px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-surface); }
+    }
+  </style>
+</head>
+<body>
+  <a class="sr-only" href="#main-content">Saltar al contenido</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo" aria-label="NBA Stats Platform logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M5 19L9 5l6 14 4-10" />
+          </svg>
+        </div>
+        <div>
+          <h1>NBA Stats</h1>
+          <p>Platform · analytics</p>
+        </div>
+      </div>
+      <nav class="nav-group" aria-label="Secciones principales">
+        <button class="nav-btn active" data-view-btn="dashboard">Dashboard</button>
+        <button class="nav-btn" data-view-btn="players">Jugadores</button>
+        <button class="nav-btn" data-view-btn="teams">Equipos</button>
+        <button class="nav-btn" data-view-btn="compare">Comparar</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="pill">Temporada <span id="seasonBadge">2024-25</span></div>
+        <p class="footer-note">Datos reales de NBA Stats vía backend propio.</p>
+      </div>
+    </aside>
+
+    <main class="main" id="main-content">
+      <section class="topbar">
+        <div>
+          <h2 id="pageTitle">Dashboard NBA</h2>
+          <p id="pageSubtitle">Plataforma de estadísticas personales y de equipo.</p>
+        </div>
+        <div class="topbar-actions">
+          <input id="searchInput" class="input" type="search" placeholder="Buscar jugador o equipo" />
+          <select id="teamFilter" class="select">
+            <option value="">Todos los equipos</option>
+          </select>
+          <button class="icon-btn" data-theme-toggle aria-label="Cambiar tema">☾</button>
+        </div>
+      </section>
+
+      <section id="view-dashboard">
+        <div class="hero-grid">
+          <article class="card hero-copy">
+            <span class="eyebrow">NBA analytics</span>
+            <h3>Todo lo importante de jugador y equipo en una sola vista.</h3>
+            <p>Resumen general con líderes, medias, forma reciente y acceso rápido a fichas individuales de jugadores y equipos, con datos reales y filtros útiles.</p>
+            <div class="hero-stats">
+              <div class="hero-stat"><span>Jugadores activos analizados</span><strong id="heroPlayers">—</strong></div>
+              <div class="hero-stat"><span>Equipos disponibles</span><strong id="heroTeams">—</strong></div>
+              <div class="hero-stat"><span>Temporada base</span><strong id="heroSeason">2024-25</strong></div>
+            </div>
+          </article>
+          <article class="card hero-panel">
+            <div class="section-title"><h3>Líderes rápidos</h3><span class="muted">Top 5 PTS</span></div>
+            <div id="leadersList" class="list"></div>
+          </article>
+        </div>
+
+        <div class="kpi-grid">
+          <article class="card kpi"><div class="label">Top anotador</div><div class="value" id="kpiTopScorer">—</div><div class="sub" id="kpiTopScorerSub">—</div></article>
+          <article class="card kpi"><div class="label">Top reboteador</div><div class="value" id="kpiTopRebounder">—</div><div class="sub" id="kpiTopRebounderSub">—</div></article>
+          <article class="card kpi"><div class="label">Top asistente</div><div class="value" id="kpiTopAssist">—</div><div class="sub" id="kpiTopAssistSub">—</div></article>
+          <article class="card kpi"><div class="label">Mejor equipo</div><div class="value" id="kpiTopTeam">—</div><div class="sub" id="kpiTopTeamSub">—</div></article>
+        </div>
+
+        <div class="content-grid">
+          <article class="card">
+            <div class="section-title">
+              <h3>Ranking de jugadores</h3>
+              <div class="filter-row">
+                <select id="playerSort" class="select">
+                  <option value="pts">Puntos</option>
+                  <option value="reb">Rebotes</option>
+                  <option value="ast">Asistencias</option>
+                  <option value="pra">PRA</option>
+                  <option value="stl">Robos</option>
+                  <option value="blk">Tapones</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Jugador</th><th>Equipo</th><th>PTS</th><th>REB</th><th>AST</th><th>PRA</th><th>FG%</th></tr>
+                </thead>
+                <tbody id="playersTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="card">
+            <div class="section-title"><h3>Equipos</h3><span class="muted">Resumen</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Equipo</th><th>W%</th><th>PTS</th><th>REB</th><th>AST</th></tr>
+                </thead>
+                <tbody id="teamsTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-players" class="hidden">
+        <div class="detail-grid">
+          <article class="card">
+            <div class="section-title"><h3>Seleccionar jugador</h3><span class="muted">Detalle individual</span></div>
+            <select id="playerSelect" class="select" style="width:100%;"></select>
+            <div id="playerProfile" class="list" style="margin-top:1rem;"></div>
+          </article>
+          <article class="card">
+            <div class="section-title"><h3>Tendencia</h3><span class="muted">Últimos partidos</span></div>
+            <div class="tabs">
+              <button class="tab-btn active" data-player-chart="pts">PTS</button>
+              <button class="tab-btn" data-player-chart="reb">REB</button>
+              <button class="tab-btn" data-player-chart="ast">AST</button>
+              <button class="tab-btn" data-player-chart="pra">PRA</button>
+            </div>
+            <div class="mini-chart-wrap"><canvas id="playerTrendChart"></canvas></div>
+          </article>
+        </div>
+        <div class="content-grid">
+          <article class="card">
+            <div class="section-title"><h3>Splits del jugador</h3><span class="muted">Casa / fuera / victorias / derrotas</span></div>
+            <div id="playerSplits" class="split-grid"></div>
+          </article>
+          <article class="card">
+            <div class="section-title"><h3>Últimos partidos</h3><span class="muted">Game log</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Fecha</th><th>Matchup</th><th>WL</th><th>PTS</th><th>REB</th><th>AST</th><th>PRA</th></tr>
+                </thead>
+                <tbody id="playerGamesBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-teams" class="hidden">
+        <div class="detail-grid">
+          <article class="card">
+            <div class="section-title"><h3>Seleccionar equipo</h3><span class="muted">Detalle colectivo</span></div>
+            <select id="teamSelect" class="select" style="width:100%;"></select>
+            <div id="teamProfile" class="list" style="margin-top:1rem;"></div>
+          </article>
+          <article class="card">
+            <div class="section-title"><h3>Rendimiento reciente</h3><span class="muted">Últimos partidos</span></div>
+            <div class="tabs">
+              <button class="tab-btn active" data-team-chart="pts">PTS</button>
+              <button class="tab-btn" data-team-chart="reb">REB</button>
+              <button class="tab-btn" data-team-chart="ast">AST</button>
+              <button class="tab-btn" data-team-chart="tov">TOV</button>
+            </div>
+            <div class="mini-chart-wrap"><canvas id="teamTrendChart"></canvas></div>
+          </article>
+        </div>
+        <div class="content-grid">
+          <article class="card">
+            <div class="section-title"><h3>Splits del equipo</h3><span class="muted">Casa / fuera / victorias / derrotas</span></div>
+            <div id="teamSplits" class="split-grid"></div>
+          </article>
+          <article class="card">
+            <div class="section-title"><h3>Rotación destacada</h3><span class="muted">Jugadores por puntos</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Jugador</th><th>PTS</th><th>REB</th><th>AST</th><th>FG%</th></tr>
+                </thead>
+                <tbody id="teamRosterBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-compare" class="hidden">
+        <div class="comparison-grid">
+          <article class="card">
+            <div class="section-title"><h3>Comparar jugadores</h3><span class="muted">Cara a cara</span></div>
+            <div class="filter-row">
+              <select id="comparePlayerA" class="select" style="width:100%"></select>
+              <select id="comparePlayerB" class="select" style="width:100%"></select>
+            </div>
+            <div id="comparePlayersOutput" class="list" style="margin-top:1rem"></div>
+          </article>
+          <article class="card">
+            <div class="section-title"><h3>Comparar equipos</h3><span class="muted">Cara a cara</span></div>
+            <div class="filter-row">
+              <select id="compareTeamA" class="select" style="width:100%"></select>
+              <select id="compareTeamB" class="select" style="width:100%"></select>
+            </div>
+            <div id="compareTeamsOutput" class="list" style="margin-top:1rem"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="mobile-tabs">
+    <button data-view-btn="dashboard">Home</button>
+    <button data-view-btn="players">Jugador</button>
+    <button data-view-btn="teams">Equipo</button>
+    <button data-view-btn="compare">Comparar</button>
+  </div>
+
+  <script>
+    const state = {
+      players: [], teams: [], currentPlayerId: null, currentTeamId: null,
+      charts: { player: null, team: null }, currentView: 'dashboard',
+      playerChartMetric: 'pts', teamChartMetric: 'pts',
+      playerDetailsCache: new Map(), teamDetailsCache: new Map()
+    };
+
+    const api = {
+      players: (sort = 'pts', team = '', search = '') => `/api/players?sort=${encodeURIComponent(sort)}&team=${encodeURIComponent(team)}&search=${encodeURIComponent(search)}`,
+      teams: () => `/api/teams`,
+      player: (id) => `/api/player/${id}`,
+      team: (id) => `/api/team/${id}`,
+      health: '/api/health'
+    };
+
+    function setThemeToggle() {
+      const btn = document.querySelector('[data-theme-toggle]');
+      const root = document.documentElement;
+      let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.setAttribute('data-theme', theme);
+      btn.textContent = theme === 'dark' ? '☀' : '☾';
+      btn.addEventListener('click', () => {
+        theme = theme === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', theme);
+        btn.textContent = theme === 'dark' ? '☀' : '☾';
+      });
+    }
+
+    function fmt(v) { return Number(v ?? 0).toFixed(1); }
+
+    async function getJSON(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Error cargando ' + url);
+      return res.json();
+    }
+
+    async function bootstrap() {
+      setThemeToggle();
+      bindViewButtons();
+      bindFilters();
+      bindChartTabs();
+      const health = await getJSON(api.health);
+      document.getElementById('seasonBadge').textContent = health.season;
+      document.getElementById('heroSeason').textContent = health.season;
+      await loadDashboard();
+    }
+
+    function bindViewButtons() {
+      document.querySelectorAll('[data-view-btn]').forEach(btn => {
+        btn.addEventListener('click', () => switchView(btn.dataset.viewBtn));
+      });
+    }
+
+    function bindChartTabs() {
+      document.querySelectorAll('[data-player-chart]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          document.querySelectorAll('[data-player-chart]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.playerChartMetric = btn.dataset.playerChart;
+          if (state.currentPlayerId) renderPlayerChart(state.playerDetailsCache.get(String(state.currentPlayerId)));
+        });
+      });
+      document.querySelectorAll('[data-team-chart]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          document.querySelectorAll('[data-team-chart]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.teamChartMetric = btn.dataset.teamChart;
+          if (state.currentTeamId) renderTeamChart(state.teamDetailsCache.get(String(state.currentTeamId)));
+        });
+      });
+    }
+
+    function switchView(view) {
+      state.currentView = view;
+      document.querySelectorAll('[id^="view-"]').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`view-${view}`).classList.remove('hidden');
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.viewBtn === view));
+      const titles = {
+        dashboard: ['Dashboard NBA', 'Vista general de jugadores y equipos.'],
+        players: ['Jugador', 'Ficha individual con splits, promedios y game log.'],
+        teams: ['Equipo', 'Ficha colectiva con resumen y rotación.'],
+        compare: ['Comparar', 'Jugador vs jugador y equipo vs equipo.']
+      };
+      document.getElementById('pageTitle').textContent = titles[view][0];
+      document.getElementById('pageSubtitle').textContent = titles[view][1];
+    }
+
+    function bindFilters() {
+      document.getElementById('playerSort').addEventListener('change', loadPlayersTable);
+      document.getElementById('teamFilter').addEventListener('change', loadPlayersTable);
+      document.getElementById('searchInput').addEventListener('input', debounce(() => {
+        if (state.currentView === 'dashboard') loadPlayersTable();
+      }, 300));
+      document.getElementById('playerSelect').addEventListener('change', e => loadPlayerDetail(e.target.value));
+      document.getElementById('teamSelect').addEventListener('change', e => loadTeamDetail(e.target.value));
+      document.getElementById('comparePlayerA').addEventListener('change', renderComparePlayers);
+      document.getElementById('comparePlayerB').addEventListener('change', renderComparePlayers);
+      document.getElementById('compareTeamA').addEventListener('change', renderCompareTeams);
+      document.getElementById('compareTeamB').addEventListener('change', renderCompareTeams);
+    }
+
+    function debounce(fn, wait) {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), wait);
+      };
+    }
+
+    async function loadDashboard() {
+      const [playersRes, teamsRes] = await Promise.all([getJSON(api.players()), getJSON(api.teams())]);
+      state.players = playersRes.players;
+      state.teams = teamsRes.teams;
+      renderTeamFilters();
+      renderDashboardKpis();
+      renderLeaders();
+      renderPlayersTable(state.players);
+      renderTeamsTable(state.teams);
+      renderSelects();
+      document.getElementById('heroPlayers').textContent = playersRes.count;
+      document.getElementById('heroTeams').textContent = teamsRes.count;
+      if (state.players[0]) await loadPlayerDetail(state.players[0].player_id);
+      if (state.teams[0]) await loadTeamDetail(state.teams[0].team_id);
+      renderComparePlayers();
+      renderCompareTeams();
+    }
+
+    function renderTeamFilters() {
+      const sel = document.getElementById('teamFilter');
+      const teamSel = document.getElementById('teamSelect');
+      const compareTeamA = document.getElementById('compareTeamA');
+      const compareTeamB = document.getElementById('compareTeamB');
+      sel.innerHTML = '<option value="">Todos los equipos</option>';
+      teamSel.innerHTML = '';
+      compareTeamA.innerHTML = '';
+      compareTeamB.innerHTML = '';
+      state.teams.forEach((t, idx) => {
+        sel.insertAdjacentHTML('beforeend', `<option value="${t.abbreviation}">${t.abbreviation}</option>`);
+        teamSel.insertAdjacentHTML('beforeend', `<option value="${t.team_id}">${t.team_name}</option>`);
+        compareTeamA.insertAdjacentHTML('beforeend', `<option value="${t.team_id}" ${idx===0?'selected':''}>${t.team_name}</option>`);
+        compareTeamB.insertAdjacentHTML('beforeend', `<option value="${t.team_id}" ${idx===1?'selected':''}>${t.team_name}</option>`);
+      });
+    }
+
+    function renderSelects() {
+      const playerSel = document.getElementById('playerSelect');
+      const comparePlayerA = document.getElementById('comparePlayerA');
+      const comparePlayerB = document.getElementById('comparePlayerB');
+      playerSel.innerHTML = '';
+      comparePlayerA.innerHTML = '';
+      comparePlayerB.innerHTML = '';
+      state.players.forEach((p, idx) => {
+        const option = `<option value="${p.player_id}">${p.player_name} · ${p.team_abbreviation}</option>`;
+        playerSel.insertAdjacentHTML('beforeend', option);
+        comparePlayerA.insertAdjacentHTML('beforeend', `<option value="${p.player_id}" ${idx===0?'selected':''}>${p.player_name} · ${p.team_abbreviation}</option>`);
+        comparePlayerB.insertAdjacentHTML('beforeend', `<option value="${p.player_id}" ${idx===1?'selected':''}>${p.player_name} · ${p.team_abbreviation}</option>`);
+      });
+    }
+
+    function renderDashboardKpis() {
+      const topPts = [...state.players].sort((a,b)=>b.pts-a.pts)[0];
+      const topReb = [...state.players].sort((a,b)=>b.reb-a.reb)[0];
+      const topAst = [...state.players].sort((a,b)=>b.ast-a.ast)[0];
+      const topTeam = [...state.teams].sort((a,b)=>b.w_pct-a.w_pct)[0];
+      document.getElementById('kpiTopScorer').textContent = fmt(topPts.pts);
+      document.getElementById('kpiTopScorerSub').textContent = `${topPts.player_name} · ${topPts.team_abbreviation}`;
+      document.getElementById('kpiTopRebounder').textContent = fmt(topReb.reb);
+      document.getElementById('kpiTopRebounderSub').textContent = `${topReb.player_name} · ${topReb.team_abbreviation}`;
+      document.getElementById('kpiTopAssist').textContent = fmt(topAst.ast);
+      document.getElementById('kpiTopAssistSub').textContent = `${topAst.player_name} · ${topAst.team_abbreviation}`;
+      document.getElementById('kpiTopTeam').textContent = `${fmt(topTeam.w_pct)}%`;
+      document.getElementById('kpiTopTeamSub').textContent = `${topTeam.team_name} · ${topTeam.w}-${topTeam.l}`;
+    }
+
+    function renderLeaders() {
+      const wrap = document.getElementById('leadersList');
+      wrap.innerHTML = '';
+      [...state.players].sort((a,b)=>b.pts-a.pts).slice(0,5).forEach((p,i) => {
+        wrap.insertAdjacentHTML('beforeend', `
+          <div class="list-item">
+            <div class="player-meta">
+              <div><strong>#${i+1} ${p.player_name}</strong><span class="muted">${p.team_abbreviation}</span></div>
+              <div style="text-align:right"><strong>${fmt(p.pts)} PTS</strong><span class="muted">${fmt(p.pra)} PRA</span></div>
+            </div>
+            <div class="badge-row">
+              <span class="pill">REB ${fmt(p.reb)}</span>
+              <span class="pill">AST ${fmt(p.ast)}</span>
+              <span class="pill">FG ${fmt(p.fg_pct)}%</span>
+            </div>
+          </div>
+        `);
+      });
+    }
+
+    async function loadPlayersTable() {
+      const sort = document.getElementById('playerSort').value;
+      const team = document.getElementById('teamFilter').value;
+      const search = document.getElementById('searchInput').value;
+      const res = await getJSON(api.players(sort, team, search));
+      state.players = res.players;
+      renderPlayersTable(state.players);
+      renderSelects();
+      renderComparePlayers();
+    }
+
+    function renderPlayersTable(rows) {
+      const body = document.getElementById('playersTableBody');
+      body.innerHTML = rows.slice(0,50).map(p => `
+        <tr data-player-id="${p.player_id}" class="player-row">
+          <td><strong>${p.player_name}</strong></td>
+          <td>${p.team_abbreviation}</td>
+          <td>${fmt(p.pts)}</td>
+          <td>${fmt(p.reb)}</td>
+          <td>${fmt(p.ast)}</td>
+          <td>${fmt(p.pra)}</td>
+          <td>${fmt(p.fg_pct)}%</td>
+        </tr>
+      `).join('');
+      body.querySelectorAll('.player-row').forEach(row => {
+        row.addEventListener('click', async () => {
+          await loadPlayerDetail(row.dataset.playerId);
+          switchView('players');
+          document.getElementById('playerSelect').value = row.dataset.playerId;
+        });
+      });
+    }
+
+    function renderTeamsTable(rows) {
+      const body = document.getElementById('teamsTableBody');
+      body.innerHTML = rows.map(t => `
+        <tr data-team-id="${t.team_id}" class="team-row">
+          <td><strong>${t.team_name}</strong></td>
+          <td>${fmt(t.w_pct)}%</td>
+          <td>${fmt(t.pts)}</td>
+          <td>${fmt(t.reb)}</td>
+          <td>${fmt(t.ast)}</td>
+        </tr>
+      `).join('');
+      body.querySelectorAll('.team-row').forEach(row => {
+        row.addEventListener('click', async () => {
+          await loadTeamDetail(row.dataset.teamId);
+          switchView('teams');
+          document.getElementById('teamSelect').value = row.dataset.teamId;
+        });
+      });
+    }
+
+    function renderSplitCards(targetId, summary) {
+      const target = document.getElementById(targetId);
+      const cards = [
+        ['Temporada', summary.season_avg], ['Últimos 5', summary.last5_avg], ['Últimos 10', summary.last10_avg],
+        ['Casa', summary.home_avg], ['Fuera', summary.away_avg], ['Victorias', summary.wins_avg], ['Derrotas', summary.losses_avg]
+      ];
+      target.innerHTML = cards.map(([name, v]) => `
+        <div class="split-card">
+          <div class="name">${name}</div>
+          <div class="num">${fmt(v.PTS || v.pts || 0)} PTS</div>
+          <div class="muted">REB ${fmt(v.REB || v.reb || 0)} · AST ${fmt(v.AST || v.ast || 0)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadPlayerDetail(playerId) {
+      state.currentPlayerId = playerId;
+      let data = state.playerDetailsCache.get(String(playerId));
+      if (!data) {
+        data = await getJSON(api.player(playerId));
+        state.playerDetailsCache.set(String(playerId), data);
+      }
+      const p = data.profile;
+      document.getElementById('playerProfile').innerHTML = `
+        <div class="list-item"><div class="player-meta"><div><strong>${p.name}</strong><span class="muted">${p.team_name} · ${p.position || '—'}</span></div><div><strong>#${p.jersey || '—'}</strong><span class="muted">Dorsal</span></div></div></div>
+        <div class="list-item"><div class="player-meta"><div><strong>${p.height || '—'}</strong><span class="muted">Altura</span></div><div><strong>${p.weight || '—'}</strong><span class="muted">Peso</span></div><div><strong>${p.experience || '0'}</strong><span class="muted">Experiencia</span></div></div></div>
+        <div class="list-item"><div class="player-meta"><div><strong>${p.country || '—'}</strong><span class="muted">País</span></div><div><strong>${p.school || '—'}</strong><span class="muted">College</span></div><div><strong>${p.draft_year || '—'}</strong><span class="muted">Draft</span></div></div></div>
+      `;
+      renderSplitCards('playerSplits', data.summary);
+      document.getElementById('playerGamesBody').innerHTML = data.games.slice(0,15).map(g => `
+        <tr><td>${g.game_date}</td><td>${g.matchup}</td><td>${g.wl}</td><td>${fmt(g.pts)}</td><td>${fmt(g.reb)}</td><td>${fmt(g.ast)}</td><td>${fmt(g.pra)}</td></tr>
+      `).join('');
+      renderPlayerChart(data);
+    }
+
+    function renderPlayerChart(data) {
+      const metric = state.playerChartMetric;
+      const labels = data.games.slice(0,10).reverse().map(g => g.game_date);
+      const values = data.games.slice(0,10).reverse().map(g => g[metric]);
+      const labelMap = { pts: 'Puntos', reb: 'Rebotes', ast: 'Asistencias', pra: 'PRA' };
+      renderLineChart('playerTrendChart', 'player', labels, values, labelMap[metric] || metric.toUpperCase());
+    }
+
+    async function loadTeamDetail(teamId) {
+      state.currentTeamId = teamId;
+      let data = state.teamDetailsCache.get(String(teamId));
+      if (!data) {
+        data = await getJSON(api.team(teamId));
+        state.teamDetailsCache.set(String(teamId), data);
+      }
+      const t = data.team;
+      document.getElementById('teamProfile').innerHTML = `
+        <div class="list-item"><div class="player-meta"><div><strong>${t.name}</strong><span class="muted">${t.city}</span></div><div><strong>${t.abbreviation}</strong><span class="muted">Abreviatura</span></div></div></div>
+        <div class="list-item"><div class="player-meta"><div><strong>${fmt(data.summary.season_avg.PTS)}</strong><span class="muted">PTS temporada</span></div><div><strong>${fmt(data.summary.season_avg.REB)}</strong><span class="muted">REB temporada</span></div><div><strong>${fmt(data.summary.season_avg.AST)}</strong><span class="muted">AST temporada</span></div></div></div>
+      `;
+      renderSplitCards('teamSplits', data.summary);
+      document.getElementById('teamRosterBody').innerHTML = data.roster.slice(0,12).map(r => `
+        <tr><td>${r.player_name}</td><td>${fmt(r.pts)}</td><td>${fmt(r.reb)}</td><td>${fmt(r.ast)}</td><td>${fmt(r.fg_pct)}%</td></tr>
+      `).join('');
+      renderTeamChart(data);
+    }
+
+    function renderTeamChart(data) {
+      const metric = state.teamChartMetric;
+      const labels = data.games.slice(0,10).reverse().map(g => g.game_date);
+      const values = data.games.slice(0,10).reverse().map(g => g[metric]);
+      const labelMap = { pts: 'Puntos', reb: 'Rebotes', ast: 'Asistencias', tov: 'Pérdidas' };
+      renderLineChart('teamTrendChart', 'team', labels, values, labelMap[metric] || metric.toUpperCase());
+    }
+
+    async function renderComparePlayers() {
+      const aId = document.getElementById('comparePlayerA').value;
+      const bId = document.getElementById('comparePlayerB').value;
+      if (!aId || !bId) return;
+      const [a, b] = await Promise.all([ensurePlayerDetail(aId), ensurePlayerDetail(bId)]);
+      const out = document.getElementById('comparePlayersOutput');
+      out.innerHTML = comparisonHtml(
+        a.profile.name,
+        b.profile.name,
+        [
+          ['PTS temporada', a.summary.season_avg.PTS, b.summary.season_avg.PTS],
+          ['REB temporada', a.summary.season_avg.REB, b.summary.season_avg.REB],
+          ['AST temporada', a.summary.season_avg.AST, b.summary.season_avg.AST],
+          ['PTS últimos 5', a.summary.last5_avg.PTS, b.summary.last5_avg.PTS],
+          ['REB últimos 5', a.summary.last5_avg.REB, b.summary.last5_avg.REB],
+          ['AST últimos 5', a.summary.last5_avg.AST, b.summary.last5_avg.AST]
+        ]
+      );
+    }
+
+    async function renderCompareTeams() {
+      const aId = document.getElementById('compareTeamA').value;
+      const bId = document.getElementById('compareTeamB').value;
+      if (!aId || !bId) return;
+      const [a, b] = await Promise.all([ensureTeamDetail(aId), ensureTeamDetail(bId)]);
+      const out = document.getElementById('compareTeamsOutput');
+      out.innerHTML = comparisonHtml(
+        a.team.name,
+        b.team.name,
+        [
+          ['PTS temporada', a.summary.season_avg.PTS, b.summary.season_avg.PTS],
+          ['REB temporada', a.summary.season_avg.REB, b.summary.season_avg.REB],
+          ['AST temporada', a.summary.season_avg.AST, b.summary.season_avg.AST],
+          ['PTS últimos 5', a.summary.last5_avg.PTS, b.summary.last5_avg.PTS],
+          ['REB últimos 5', a.summary.last5_avg.REB, b.summary.last5_avg.REB],
+          ['AST últimos 5', a.summary.last5_avg.AST, b.summary.last5_avg.AST]
+        ]
+      );
+    }
+
+    function comparisonHtml(titleA, titleB, rows) {
+      return `
+        <div class="list-item"><div class="player-meta"><div><strong>${titleA}</strong><span class="muted">Lado A</span></div><div><strong>${titleB}</strong><span class="muted">Lado B</span></div></div></div>
+        ${rows.map(([label,a,b]) => `
+          <div class="comparison-stat">
+            <h4>${label}</h4>
+            <div class="player-meta">
+              <div class="comparison-value">${fmt(a)}</div>
+              <div class="comparison-value">${fmt(b)}</div>
+            </div>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    async function ensurePlayerDetail(id) {
+      if (!state.playerDetailsCache.has(String(id))) {
+        state.playerDetailsCache.set(String(id), await getJSON(api.player(id)));
+      }
+      return state.playerDetailsCache.get(String(id));
+    }
+
+    async function ensureTeamDetail(id) {
+      if (!state.teamDetailsCache.has(String(id))) {
+        state.teamDetailsCache.set(String(id), await getJSON(api.team(id)));
+      }
+      return state.teamDetailsCache.get(String(id));
+    }
+
+    function renderLineChart(canvasId, key, labels, data, label) {
+      const ctx = document.getElementById(canvasId);
+      if (state.charts[key]) state.charts[key].destroy();
+      state.charts[key] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label,
+            data,
+            borderColor: '#4fc3c8',
+            backgroundColor: 'rgba(79,195,200,.18)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 2
+          }]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#9eabb8' }, grid: { color: 'rgba(255,255,255,.06)' } },
+            y: { ticks: { color: '#9eabb8' }, grid: { color: 'rgba(255,255,255,.06)' } }
+          }
+        }
+      });
+    }
+
+    bootstrap().catch(err => {
+      document.body.innerHTML = `<main style="padding:2rem;font-family:Arial,sans-serif;color:#fff;background:#111;min-height:100vh;"><h1>Error al cargar la app</h1><p>${err.message}</p><p>Asegúrate de arrancar el backend con <strong>python server.py</strong>.</p></main>`;
+    });
+  </script>
+</body>
+</html>
