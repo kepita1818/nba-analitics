@@ -29,16 +29,6 @@ def setup_logging():
 setup_logging()
 
 
-def get_players_cached():
-    global PLAYER_BY_ID
-    if not PLAYER_BY_ID:
-        try:
-            PLAYER_BY_ID = {p['id']: p for p in players.get_active_players()}
-        except Exception:
-            PLAYER_BY_ID = {}
-    return PLAYER_BY_ID
-
-
 def get_teams_cached():
     global TEAM_BY_ID
     if not TEAM_BY_ID:
@@ -124,7 +114,7 @@ def api_players():
         return jsonify({'season': SEASON, 'count': len(rows), 'players': rows[:200]})
     except Exception as e:
         app.logger.exception(e)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'season': SEASON, 'count': 0, 'players': [], 'error': 'NBA data temporarily unavailable'}), 200
 
 
 @app.route('/api/teams')
@@ -136,7 +126,7 @@ def api_teams():
         return jsonify({'season': SEASON, 'count': len(rows), 'teams': rows})
     except Exception as e:
         app.logger.exception(e)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'season': SEASON, 'count': 0, 'teams': [], 'error': 'NBA data temporarily unavailable'}), 200
 
 
 @app.route('/api/player/<int:player_id>')
@@ -166,7 +156,7 @@ def player_detail(player_id):
         })
     except Exception as e:
         app.logger.exception(e)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'season': SEASON, 'player': {'id': player_id}, 'recent_games': [], 'season_avg': {}, 'error': 'NBA data temporarily unavailable'}), 200
 
 
 @app.route('/api/team/<int:team_id>')
@@ -188,7 +178,7 @@ def team_detail(team_id):
         })
     except Exception as e:
         app.logger.exception(e)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'season': SEASON, 'team': {'id': team_id}, 'recent_games': [], 'season_avg': {}, 'error': 'NBA data temporarily unavailable'}), 200
 
 
 @app.route('/')
@@ -198,6 +188,11 @@ def index():
 
 @app.route('/index.html')
 def index_html():
+    return send_from_directory(app.static_folder, 'nba-stats-platform.html')
+
+
+@app.route('/home')
+def home():
     return send_from_directory(app.static_folder, 'nba-stats-platform.html')
 
 
@@ -223,7 +218,8 @@ def too_many_requests(e):
 
 @app.errorhandler(500)
 def internal_error(e):
-    return jsonify({'error': 'Internal server error'}), 500
+    app.logger.exception(e)
+    return send_from_directory(app.static_folder, 'nba-stats-platform.html')
 
 
 if __name__ == '__main__':
