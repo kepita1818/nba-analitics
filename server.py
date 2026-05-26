@@ -3,9 +3,7 @@ from flask_cors import CORS
 from nba_api.stats.static import players, teams
 from nba_api.stats.endpoints import playergamelog, teamgamelog, leaguedashplayerstats, leaguedashteamstats, commonplayerinfo
 from collections import defaultdict
-from datetime import datetime
 import os
-import math
 import logging
 from logging.handlers import RotatingFileHandler
 
@@ -16,7 +14,7 @@ SEASON = '2025-26'
 SEASON_TYPE = 'Regular Season'
 TEAM_BY_ID = {}
 PLAYER_BY_ID = {}
- 
+
 
 def setup_logging():
     if not os.path.exists('logs'):
@@ -67,15 +65,6 @@ def safe_int(v, default=0):
         return int(float(v))
     except Exception:
         return default
-
-
-def parse_matchup(matchup):
-    if not matchup:
-        return '', '', ''
-    parts = matchup.split(' ')
-    if len(parts) >= 3:
-        return parts[0], parts[1], parts[2]
-    return '', '', ''
 
 
 def avg_stats(rows, keys):
@@ -129,7 +118,6 @@ def health():
 @app.route('/api/players')
 def api_players():
     try:
-        app.logger.info('Request: /api/players')
         df = leaguedashplayerstats.LeagueDashPlayerStats(season=SEASON, season_type_all_star=SEASON_TYPE).get_data_frames()[0]
         rows = [format_player_stats(r) for _, r in df.iterrows()]
         rows.sort(key=lambda x: x['pts'], reverse=True)
@@ -142,7 +130,6 @@ def api_players():
 @app.route('/api/teams')
 def api_teams():
     try:
-        app.logger.info('Request: /api/teams')
         df = leaguedashteamstats.LeagueDashTeamStats(season=SEASON, season_type_all_star=SEASON_TYPE).get_data_frames()[0]
         rows = [format_team_stats(r) for _, r in df.iterrows()]
         rows.sort(key=lambda x: x['pts'], reverse=True)
@@ -155,7 +142,6 @@ def api_teams():
 @app.route('/api/player/<int:player_id>')
 def player_detail(player_id):
     try:
-        app.logger.info(f'Request: /api/player/{player_id}')
         player_info = commonplayerinfo.CommonPlayerInfo(player_id=player_id).get_normalized_dict().get('CommonPlayerInfo', [])
         info = player_info[0] if player_info else {}
         logs_df = playergamelog.PlayerGameLog(player_id=player_id, season=SEASON, season_type_all_star=SEASON_TYPE).get_data_frames()[0]
@@ -186,7 +172,6 @@ def player_detail(player_id):
 @app.route('/api/team/<int:team_id>')
 def team_detail(team_id):
     try:
-        app.logger.info(f'Request: /api/team/{team_id}')
         team = get_teams_cached().get(team_id, {})
         logs_df = teamgamelog.TeamGameLog(team_id=team_id, season=SEASON, season_type_all_star=SEASON_TYPE).get_data_frames()[0]
         logs = logs_df.to_dict(orient='records')
@@ -211,14 +196,24 @@ def index():
     return send_from_directory(app.static_folder, 'nba-stats-platform.html')
 
 
+@app.route('/index.html')
+def index_html():
+    return send_from_directory(app.static_folder, 'nba-stats-platform.html')
+
+
 @app.route('/<path:path>')
 def static_proxy(path):
-    return send_from_directory(app.static_folder, path)
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    try:
+        return send_from_directory(app.static_folder, path)
+    except Exception:
+        return send_from_directory(app.static_folder, 'nba-stats-platform.html')
 
 
 @app.errorhandler(404)
 def not_found(e):
-    return jsonify({'error': 'Not found'}), 404
+    return send_from_directory(app.static_folder, 'nba-stats-platform.html')
 
 
 @app.errorhandler(429)
