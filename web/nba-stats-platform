@@ -762,7 +762,7 @@
         }
       });
     }
-
+ 
     bootstrap().catch(err => {
       document.body.innerHTML = `<main style="padding:2rem;font-family:Arial,sans-serif;color:#fff;background:#111;min-height:100vh;"><h1>Error al cargar la app</h1><p>${err.message}</p><p>Asegúrate de arrancar el backend con <strong>python server.py</strong>.</p></main>`;
     });
