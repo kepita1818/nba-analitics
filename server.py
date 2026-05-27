@@ -1,16 +1,16 @@
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
-from nba_api.stats.endpoints import leaguedashplayerstats, leaguedashteamstats
+from nba_api.stats.endpoints import leaguedashplayerstats, leaguedashteamstats, leagueleaders
 from nba_api.stats.static import teams
 from nba_api.stats.library.http import NBAStatsHTTP
 from collections import defaultdict
 from logging.handlers import RotatingFileHandler
-import logging, os, time
+import logging, os, time, json
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
-# CONFIGURACIÓN CRÍTICA: Headers para que NBA.com no bloquee
+# Headers CRÍTICOS para que NBA.com no bloquee las peticiones
 NBAStatsHTTP.headers = {
     'Accept': 'application/json, text/plain, */*',
     'Accept-Encoding': 'gzip, deflate, br',
@@ -25,12 +25,17 @@ NBAStatsHTTP.headers = {
     'Sec-Fetch-Dest': 'empty',
     'Sec-Fetch-Mode': 'cors',
     'Sec-Fetch-Site': 'same-site',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
 
+# Configuración de temporada - intentamos playoffs primero, luego regular
 SEASON = '2025-26'
-SEASON_TYPE = 'Regular Season'
+SEASON_TYPES = ['Playoffs', 'Regular Season']
 TEAM_BY_ID = {}
+
+# Cache en memoria para no saturar la API
+CACHE = {}
+CACHE_TTL = 300  # 5 minutos
 
 def setup_logging():
     os.makedirs('logs', exist_ok=True)
@@ -79,6 +84,10 @@ def fplayer(r):
         'fg_pct': safe_float(r.get('FG_PCT')),
         'fg3_pct': safe_float(r.get('FG3_PCT')),
         'ft_pct': safe_float(r.get('FT_PCT')),
+        'fgm': safe_float(r.get('FGM')),
+        'fga': safe_float(r.get('FGA')),
+        'fg3m': safe_float(r.get('FG3M')),
+        'fg3a': safe_float(r.get('FG3A')),
     }
 
 def fteam(r):
@@ -97,66 +106,106 @@ def fteam(r):
         'fg3_pct': safe_float(r.get('FG3_PCT')),
         'ft_pct': safe_float(r.get('FT_PCT')),
         'pf': safe_float(r.get('PF')),
+        'pace': safe_float(r.get('PACE')),
     }
 
-def avg(rows, keys):
-    if not rows:
-        return {k: 0 for k in keys}
-    out = defaultdict(float)
-    for r in rows:
-        for k in keys:
-            out[k] += safe_float(r.get(k))
-    n = len(rows)
-    return {k: round(out[k] / n, 2) for k in keys}
+def get_cache_key(endpoint, season, season_type):
+    return f"{endpoint}_{season}_{season_type}"
 
-def fetch_with_retry(endpoint_class, season, season_type, max_retries=3):
-    """Intenta obtener datos con retry y delay exponencial."""
+def get_cached(key):
+    if key in CACHE:
+        data, timestamp = CACHE[key]
+        if time.time() - timestamp < CACHE_TTL:
+            return data
+    return None
+
+def set_cache(key, data):
+    CACHE[key] = (data, time.time())
+
+def fetch_endpoint(endpoint_class, season, season_type, max_retries=3):
+    """Obtiene datos con retry, cache y fallback automático."""
+    cache_key = get_cache_key(endpoint_class.__name__, season, season_type)
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached, season_type
+
     for attempt in range(max_retries):
         try:
-            app.logger.info(f"Intentando {endpoint_class.__name__} (intento {attempt + 1}/{max_retries})")
+            app.logger.info(f"[{endpoint_class.__name__}] Intento {attempt+1}/{max_retries} | Season: {season} | Type: {season_type}")
             endpoint = endpoint_class(
                 season=season,
                 season_type_all_star=season_type,
                 timeout=30
             )
             df = endpoint.get_data_frames()[0]
-            app.logger.info(f"Éxito: {len(df)} filas obtenidas")
-            return df
-        except Exception as e:
-            app.logger.warning(f"Intento {attempt + 1} fallido: {str(e)}")
-            if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)  # 1s, 2s, 4s
+
+            if df is not None and not df.empty:
+                app.logger.info(f"[{endpoint_class.__name__}] ÉXITO: {len(df)} filas")
+                set_cache(cache_key, df)
+                return df, season_type
             else:
-                raise
-    return None
+                app.logger.warning(f"[{endpoint_class.__name__}] Respuesta vacía")
+
+        except Exception as e:
+            app.logger.warning(f"[{endpoint_class.__name__}] Intento {attempt+1} fallido: {str(e)[:200]}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+
+    return None, None
+
+def fetch_with_fallback(endpoint_class, season, season_types):
+    """Intenta cada season_type hasta que uno funcione."""
+    for st in season_types:
+        df, used_type = fetch_endpoint(endpoint_class, season, st)
+        if df is not None:
+            return df, used_type, season
+
+    # Si nada funciona, intentamos temporada anterior
+    prev_season = f"{int(season.split('-')[0])-1}-{int(season.split('-')[0])}"
+    app.logger.warning(f"Intentando temporada anterior: {prev_season}")
+    for st in season_types:
+        df, used_type = fetch_endpoint(endpoint_class, prev_season, st)
+        if df is not None:
+            return df, used_type, prev_season
+
+    return None, None, season
 
 @app.route('/api/health')
 def health():
     return jsonify({
         'ok': True,
         'season': SEASON,
-        'seasonType': SEASON_TYPE,
+        'seasonTypes': SEASON_TYPES,
         'source': 'NBA official stats via nba_api',
-        'version': '1.11.4'
+        'version': '2.0',
+        'timestamp': time.time()
     })
 
 @app.route('/api/players')
 def api_players():
     try:
-        df = fetch_with_retry(leaguedashplayerstats.LeagueDashPlayerStats, SEASON, SEASON_TYPE)
+        df, used_type, used_season = fetch_with_fallback(
+            leaguedashplayerstats.LeagueDashPlayerStats, 
+            SEASON, 
+            SEASON_TYPES
+        )
+
         if df is None or df.empty:
             return jsonify({
                 'season': SEASON,
+                'usedSeason': used_season,
+                'usedType': used_type,
                 'count': 0,
                 'players': [],
-                'warning': 'No hay datos disponibles para esta temporada. Es posible que estemos en offseason o la temporada aún no haya comenzado.'
+                'warning': 'No hay datos disponibles. Intenta más tarde.'
             }), 200
-        
+
         rows = [fplayer(r) for _, r in df.iterrows()]
         rows.sort(key=lambda x: x['pts'], reverse=True)
-        
+
         return jsonify({
-            'season': SEASON,
+            'season': used_season,
+            'seasonType': used_type,
             'count': len(rows),
             'players': rows[:200]
         })
@@ -166,26 +215,34 @@ def api_players():
             'season': SEASON,
             'count': 0,
             'players': [],
-            'error': f'nba stats unavailable: {str(e)}'
+            'error': str(e)
         }), 200
 
 @app.route('/api/teams')
 def api_teams():
     try:
-        df = fetch_with_retry(leaguedashteamstats.LeagueDashTeamStats, SEASON, SEASON_TYPE)
+        df, used_type, used_season = fetch_with_fallback(
+            leaguedashteamstats.LeagueDashTeamStats,
+            SEASON,
+            SEASON_TYPES
+        )
+
         if df is None or df.empty:
             return jsonify({
                 'season': SEASON,
+                'usedSeason': used_season,
+                'usedType': used_type,
                 'count': 0,
                 'teams': [],
-                'warning': 'No hay datos disponibles para esta temporada.'
+                'warning': 'No hay datos disponibles.'
             }), 200
-        
+
         rows = [fteam(r) for _, r in df.iterrows()]
         rows.sort(key=lambda x: x['pts'], reverse=True)
-        
+
         return jsonify({
-            'season': SEASON,
+            'season': used_season,
+            'seasonType': used_type,
             'count': len(rows),
             'teams': rows
         })
@@ -195,35 +252,41 @@ def api_teams():
             'season': SEASON,
             'count': 0,
             'teams': [],
-            'error': f'nba stats unavailable: {str(e)}'
+            'error': str(e)
         }), 200
 
 @app.route('/api/leaders/<category>')
 def api_leaders(category):
-    """Endpoint adicional para líderes por categoría."""
-    from nba_api.stats.endpoints import leagueleaders
     valid_cats = ['PTS', 'REB', 'AST', 'STL', 'BLK', 'FG_PCT', 'FG3_PCT', 'FT_PCT']
     if category.upper() not in valid_cats:
         return jsonify({'error': f'Categoría inválida. Usa: {valid_cats}'}), 400
-    
+
     try:
-        ll = leagueleaders.LeagueLeaders(
-            season=SEASON,
-            season_type_all_star=SEASON_TYPE,
-            stat_category_abbreviation=category.upper(),
-            per_mode48='PerGame'
-        )
-        df = ll.get_data_frames()[0]
-        rows = [{
-            'rank': int(r.get('RANK', 0)),
-            'name': r.get('PLAYER'),
-            'team': r.get('TEAM'),
-            'value': safe_float(r.get(category.upper()))
-        } for _, r in df.head(20).iterrows()]
-        return jsonify({'category': category, 'leaders': rows})
+        # Intentar con cada season type
+        for st in SEASON_TYPES:
+            try:
+                ll = leagueleaders.LeagueLeaders(
+                    season=SEASON,
+                    season_type_all_star=st,
+                    stat_category_abbreviation=category.upper(),
+                    per_mode48='PerGame'
+                )
+                df = ll.get_data_frames()[0]
+                if df is not None and not df.empty:
+                    rows = [{
+                        'rank': int(r.get('RANK', 0)),
+                        'name': r.get('PLAYER'),
+                        'team': r.get('TEAM'),
+                        'value': safe_float(r.get(category.upper()))
+                    } for _, r in df.head(20).iterrows()]
+                    return jsonify({'category': category, 'seasonType': st, 'leaders': rows})
+            except:
+                continue
+
+        return jsonify({'error': 'No leaders data available'}), 200
     except Exception as e:
         app.logger.exception(e)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e)}), 200
 
 @app.route('/')
 def index():
@@ -242,6 +305,11 @@ def static_proxy(path):
 @app.errorhandler(404)
 def not_found(e):
     return send_from_directory(app.static_folder, 'nba-stats-platform.html')
+
+@app.errorhandler(500)
+def server_error(e):
+    app.logger.exception(f"Error 500: {e}")
+    return jsonify({'error': 'Internal server error', 'detail': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
