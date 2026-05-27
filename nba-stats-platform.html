@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Stats Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg: #0a0b0e;
+  --panel: #111318;
+  --card: #161922;
+  --card-hover: #1a1e28;
+  --line: #1e222c;
+  --line-hover: #2a2f3d;
+  --text: #e8eaed;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --accent: #10b981;
+  --accent-light: #34d399;
+  --accent2: #3b82f6;
+  --accent3: #f59e0b;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #10b981;
+  --shadow: 0 4px 24px rgba(0,0,0,.5);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,.6);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 270px 1fr;
+  min-height: 100vh;
+}
+
+/* ===== SIDEBAR ===== */
+.side {
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: 28px 20px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 36px;
+  padding: 0 4px;
+}
+
+.logo {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), #059669);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: #fff;
+  font-size: 20px;
+  box-shadow: 0 4px 16px rgba(16,185,129,.3);
+}
+
+.brand-text { display: flex; flex-direction: column; }
+.brand-title { font-weight: 800; font-size: 18px; letter-spacing: -0.02em; }
+.brand-sub { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 13px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all .2s;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.nav button:hover { background: rgba(255,255,255,.04); color: var(--text); }
+.nav button.active {
+  background: rgba(16,185,129,.12);
+  color: var(--accent);
+  font-weight: 600;
+}
+.nav button::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.nav button.active::before { opacity: 1; }
+
+.side-footer {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(16,185,129,.1);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(16,185,129,.2);
+  margin-bottom: 10px;
+}
+.tag::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+.status {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status.loading { background: rgba(59,130,246,.1); color: var(--accent2); border: 1px solid rgba(59,130,246,.2); }
+.status.error { background: rgba(239,68,68,.1); color: var(--danger); border: 1px solid rgba(239,68,68,.2); }
+.status.ok { background: rgba(16,185,129,.1); color: var(--accent); border: 1px solid rgba(16,185,129,.2); }
+.status::before { font-size: 14px; }
+.status.loading::before { content: "⟳"; animation: spin 1s linear infinite; }
+.status.error::before { content: "✕"; }
+.status.ok::before { content: "✓"; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.side-desc {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ===== MAIN ===== */
+.main { padding: 24px; overflow: auto; }
+
+.hero {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+}
+
+.hero h1 { margin: 0; font-size: 30px; line-height: 1; letter-spacing: -0.03em; font-weight: 800; }
+.hero p { margin: 8px 0 0; color: var(--text-muted); font-size: 14px; }
+
+.controls { display: flex; gap: 10px; align-items: center; }
+.controls input, .controls select, .controls button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-size: 14px;
+  outline: none;
+  transition: all .2s;
+  font-family: inherit;
+}
+.controls input:focus, .controls select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,.1); }
+.controls input { min-width: 220px; }
+.controls input::placeholder { color: var(--text-muted); }
+.controls button {
+  cursor: pointer;
+  font-size: 16px;
+  padding: 10px 14px;
+  display: grid;
+  place-items: center;
+  min-width: 42px;
+}
+.controls button:hover { background: var(--line-hover); border-color: var(--line-hover); }
+.controls button:active { transform: scale(.95); }
+
+/* ===== STATS CARDS ===== */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  transition: all .2s;
+  position: relative;
+  overflow: hidden;
+}
+.card:hover { border-color: var(--line-hover); transform: translateY(-2px); box-shadow: var(--shadow); }
+.card::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  opacity: 0;
+  transition: opacity .2s;
+}
+.card:hover::after { opacity: 1; }
+
+.card h3 {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kpi { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; color: var(--text); line-height: 1; }
+.kpi.small { font-size: 16px; font-weight: 600; color: var(--text-secondary); margin-top: 6px; }
+.kpi.trend { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+.kpi.trend::before { content: "↑"; }
+
+/* ===== GRIDS ===== */
+.grid2 { display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px; margin-bottom: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+
+/* ===== TABLES ===== */
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+th {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: .08em;
+  background: rgba(255,255,255,.02);
+  position: sticky;
+  top: 0;
+}
+tr { transition: background .15s; }
+tr:hover td { background: rgba(255,255,255,.03); }
+
+.player-cell { display: flex; align-items: center; gap: 10px; }
+.player-rank {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--line);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.player-rank.top1 { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; }
+.player-rank.top2 { background: linear-gradient(135deg, #9ca3af, #6b7280); color: #fff; }
+.player-rank.top3 { background: linear-gradient(135deg, #b45309, #92400e); color: #fff; }
+
+.stat-value { font-weight: 700; font-size: 14px; }
+.stat-value.high { color: var(--accent); }
+.stat-value.medium { color: var(--accent3); }
+
+/* ===== TABS ===== */
+.tabs { display: flex; gap: 6px; margin: 0 0 18px; flex-wrap: wrap; }
+.tabs button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all .2s;
+  font-family: inherit;
+}
+.tabs button:hover { color: var(--text); border-color: var(--text-muted); }
+.tabs button.active {
+  background: rgba(16,185,129,.12);
+  color: var(--accent);
+  border-color: rgba(16,185,129,.3);
+  font-weight: 600;
+}
+
+/* ===== SECTIONS ===== */
+.section { margin-top: 0; }
+.hidden { display: none !important; }
+
+/* ===== ERROR / LOADING ===== */
+.error-banner {
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.2);
+  color: var(--danger);
+  padding: 16px 20px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 20px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.error-banner::before { content: "⚠️"; font-size: 18px; }
+
+.info-banner {
+  background: rgba(59,130,246,.08);
+  border: 1px solid rgba(59,130,246,.2);
+  color: var(--accent2);
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--line) 25%, rgba(255,255,255,.04) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+  height: 16px;
+  margin-bottom: 8px;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ===== CHARTS ===== */
+.chart-container { position: relative; height: 280px; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1100px) {
+  .app { grid-template-columns: 1fr; }
+  .side { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--line); padding: 20px 16px; }
+  .stats, .grid2, .grid3 { grid-template-columns: 1fr; }
+  .hero { flex-direction: column; align-items: flex-start; }
+  .controls { width: 100%; flex-wrap: wrap; }
+  .controls input, .controls select { flex: 1; min-width: 0; width: 100%; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--line-hover); }
+</style>
+<base target="_blank">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">N</div>
+      <div class="brand-text">
+        <div class="brand-title">NBA Stats</div>
+        <div class="brand-sub">Platform · Analytics</div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="active" data-view="dashboard">Dashboard</button>
+      <button data-view="players">Jugadores</button>
+      <button data-view="teams">Equipos</button>
+      <button data-view="compare">Comparar</button>
+    </div>
+    <div class="side-footer">
+      <div class="tag" id="seasonTag">Temporada 2025-26</div>
+      <div class="status loading" id="apiStatus">Cargando datos...</div>
+      <p class="side-desc">
+        Datos reales de NBA Stats vía API oficial. Se actualiza automáticamente cada 5 minutos.
+      </p>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="hero">
+      <div>
+        <h1 id="heroTitle">Dashboard NBA</h1>
+        <p id="heroSub">Vista general de jugadores y equipos.</p>
+      </div>
+      <div class="controls">
+        <input id="search" placeholder="Buscar jugador o equipo...">
+        <select id="teamFilter"><option value="">Todos los equipos</option></select>
+        <button id="refreshBtn" title="Recargar datos">↻</button>
+      </div>
+    </div>
+
+    <div id="errorContainer"></div>
+    <div id="infoContainer"></div>
+
+    <section id="dashboardView" class="section">
+      <div class="stats">
+        <div class="card">
+          <h3>Jugadores activos</h3>
+          <div class="kpi" id="playersCount">—</div>
+          <div class="kpi trend" id="playersTrend" style="display:none">En temporada</div>
+        </div>
+        <div class="card">
+          <h3>Equipos</h3>
+          <div class="kpi" id="teamsCount">—</div>
+        </div>
+        <div class="card">
+          <h3>Top anotador</h3>
+          <div class="kpi" id="topScorer">—</div>
+          <div class="kpi small" id="topScorerName">—</div>
+        </div>
+        <div class="card">
+          <h3>Temporada</h3>
+          <div class="kpi" id="currentSeason">2025-26</div>
+          <div class="kpi small" id="seasonType">—</div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>🏀 Líderes de anotación</h3>
+          <table>
+            <thead><tr><th>#</th><th>Jugador</th><th>Equipo</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead>
+            <tbody id="leadersBody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>🏆 Top equipos ofensivos</h3>
+          <table>
+            <thead><tr><th>Equipo</th><th>W</th><th>L</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead>
+            <tbody id="teamsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid3">
+        <div class="card">
+          <h3>🔥 Máximo anotador</h3>
+          <div style="font-size:20px;font-weight:800;margin-bottom:4px" id="topScorerCard">—</div>
+          <div style="color:var(--text-muted);font-size:13px" id="topScorerDetail">—</div>
+        </div>
+        <div class="card">
+          <h3>💪 Máximo reboteador</h3>
+          <div style="font-size:20px;font-weight:800;margin-bottom:4px" id="topRebounderCard">—</div>
+          <div style="color:var(--text-muted);font-size:13px" id="topRebounderDetail">—</div>
+        </div>
+        <div class="card">
+          <h3>👟 Máximo asistente</h3>
+          <div style="font-size:20px;font-weight:800;margin-bottom:4px" id="topAssisterCard">—</div>
+          <div style="color:var(--text-muted);font-size:13px" id="topAssisterDetail">—</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="playersView" class="section hidden">
+      <div class="card">
+        <h3>Ranking de jugadores</h3>
+        <div style="color:var(--text-muted);font-size:13px;margin-bottom:14px" id="playersSubtitle">Temporada regular · Ordenado por PTS</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Jugador</th><th>Equipo</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>MIN</th><th>GP</th><th>FG%</th><th>3P%</th>
+              </tr>
+            </thead>
+            <tbody id="playersTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="teamsView" class="section hidden">
+      <div class="card">
+        <h3>Equipos</h3>
+        <div style="color:var(--text-muted);font-size:13px;margin-bottom:14px" id="teamsSubtitle">Resumen por equipo con datos reales</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Equipo</th><th>W</th><th>L</th><th>PTS</th><th>REB</th><th>AST</th><th>FG%</th><th>3P%</th><th>FT%</th></tr>
+            </thead>
+            <tbody id="teamsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="compareView" class="section hidden">
+      <div class="grid2">
+        <div class="card">
+          <h3>Comparar jugadores (Top 8)</h3>
+          <div class="tabs">
+            <button class="active" data-chart="pts">PTS</button>
+            <button data-chart="reb">REB</button>
+            <button data-chart="ast">AST</button>
+            <button data-chart="stl">STL</button>
+            <button data-chart="blk">BLK</button>
+          </div>
+          <div class="chart-container">
+            <canvas id="playerChart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Comparar equipos (Top 8)</h3>
+          <div class="tabs">
+            <button class="active" data-chart-team="pts">PTS</button>
+            <button data-chart-team="reb">REB</button>
+            <button data-chart-team="ast">AST</button>
+          </div>
+          <div class="chart-container">
+            <canvas id="teamChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const api = { health: '/api/health', players: '/api/players', teams: '/api/teams' };
+const state = { 
+  players: [], 
+  teams: [], 
+  view: 'dashboard', 
+  playerMetric: 'pts', 
+  teamMetric: 'pts', 
+  loading: false,
+  season: '2025-26',
+  seasonType: 'Regular Season'
+};
+let playerChart, teamChart;
+let autoRefreshInterval;
+
+const fmt = n => n === null || n === undefined || n === '' || Number.isNaN(Number(n)) ? '—' : Number(n).toFixed(1);
+const fmtInt = n => n === null || n === undefined || n === '' ? '—' : Number(n);
+const fmtPct = n => n === null || n === undefined || n === '' ? '—' : (Number(n) * 100).toFixed(1) + '%';
+
+async function j(u) {
+  const r = await fetch(u, { headers: { 'Accept': 'application/json' } });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`HTTP ${r.status}: ${text.slice(0, 200)}`);
+  }
+  return await r.json();
+}
+
+function setStatus(type, msg) {
+  const el = document.getElementById('apiStatus');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+function showError(msg) {
+  document.getElementById('errorContainer').innerHTML = 
+    `<div class="error-banner">${msg}</div>`;
+}
+
+function showInfo(msg) {
+  document.getElementById('infoContainer').innerHTML = 
+    `<div class="info-banner">ℹ️ ${msg}</div>`;
+}
+
+function clearMessages() {
+  document.getElementById('errorContainer').innerHTML = '';
+  document.getElementById('infoContainer').innerHTML = '';
+}
+
+function activeNav(v) {
+  document.querySelectorAll('.nav button').forEach(b => 
+    b.classList.toggle('active', b.dataset.view === v));
+}
+
+function show(v) {
+  state.view = v;
+  ['dashboard', 'players', 'teams', 'compare'].forEach(x => 
+    document.getElementById(x + 'View').classList.toggle('hidden', x !== v));
+  activeNav(v);
+  const h = {
+    dashboard: ['Dashboard NBA', 'Vista general de jugadores y equipos.'],
+    players: ['Jugadores', 'Ranking real de la temporada actual.'],
+    teams: ['Equipos', 'Ficha colectiva con resumen.'],
+    compare: ['Comparar', 'Análisis rápido entre jugadores y equipos.']
+  };
+  document.getElementById('heroTitle').textContent = h[v][0];
+  document.getElementById('heroSub').textContent = h[v][1];
+  if (v === 'compare') setTimeout(drawCharts, 50);
+}
+
+function getFilteredData() {
+  const search = (document.getElementById('search').value || '').toLowerCase().trim();
+  const teamFilter = document.getElementById('teamFilter').value;
+
+  const ps = state.players.filter(p => 
+    (!search || (`${p.name} ${p.team}`.toLowerCase().includes(search))) &&
+    (!teamFilter || p.team === teamFilter)
+  );
+  const ts = state.teams.filter(t => 
+    (!search || t.name.toLowerCase().includes(search))
+  );
+  return { ps, ts };
+}
+
+function getRankClass(i) {
+  if (i === 0) return 'top1';
+  if (i === 1) return 'top2';
+  if (i === 2) return 'top3';
+  return '';
+}
+
+function render() {
+  const { ps, ts } = getFilteredData();
+
+  // Update season display
+  document.getElementById('currentSeason').textContent = state.season;
+  document.getElementById('seasonType').textContent = state.seasonType;
+  document.getElementById('seasonTag').textContent = 'Temporada ' + state.season;
+  document.getElementById('playersSubtitle').textContent = `${state.season} · ${state.seasonType} · Ordenado por PTS`;
+  document.getElementById('teamsSubtitle').textContent = `${state.season} · ${state.seasonType}`;
+
+  // KPIs
+  document.getElementById('playersCount').textContent = ps.length;
+  document.getElementById('teamsCount').textContent = ts.length;
+
+  const top = ps[0] || {};
+  document.getElementById('topScorer').textContent = fmt(top.pts);
+  document.getElementById('topScorerName').textContent = top.name || 'Sin datos';
+
+  // Leaders table
+  document.getElementById('leadersBody').innerHTML = ps.slice(0, 10).map((p, i) => `
+    <tr>
+      <td><span class="player-rank ${getRankClass(i)}">${i + 1}</span></td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.team || '—'}</td>
+      <td class="stat-value high">${fmt(p.pts)}</td>
+      <td>${fmt(p.reb)}</td>
+      <td>${fmt(p.ast)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Sin datos disponibles</td></tr>';
+
+  // Teams table
+  document.getElementById('teamsBody').innerHTML = ts.slice(0, 10).map((t, i) => `
+    <tr>
+      <td><strong>${t.name}</strong></td>
+      <td>${fmtInt(t.w)}</td>
+      <td>${fmtInt(t.l)}</td>
+      <td class="stat-value high">${fmt(t.pts)}</td>
+      <td>${fmt(t.reb)}</td>
+      <td>${fmt(t.ast)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Sin datos disponibles</td></tr>';
+
+  // Full players table
+  document.getElementById('playersTable').innerHTML = ps.slice(0, 100).map((p, i) => `
+    <tr>
+      <td><span class="player-rank ${getRankClass(i)}">${i + 1}</span></td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.team || '—'}</td>
+      <td class="stat-value high">${fmt(p.pts)}</td>
+      <td>${fmt(p.reb)}</td>
+      <td>${fmt(p.ast)}</td>
+      <td>${fmt(p.stl)}</td>
+      <td>${fmt(p.blk)}</td>
+      <td>${fmt(p.min)}</td>
+      <td>${fmtInt(p.games)}</td>
+      <td>${fmtPct(p.fg_pct)}</td>
+      <td>${fmtPct(p.fg3_pct)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Sin datos disponibles</td></tr>';
+
+  // Full teams table
+  document.getElementById('teamsTable').innerHTML = ts.map((t, i) => `
+    <tr>
+      <td><span class="player-rank ${getRankClass(i)}">${i + 1}</span></td>
+      <td><strong>${t.name}</strong></td>
+      <td>${fmtInt(t.w)}</td>
+      <td>${fmtInt(t.l)}</td>
+      <td class="stat-value high">${fmt(t.pts)}</td>
+      <td>${fmt(t.reb)}</td>
+      <td>${fmt(t.ast)}</td>
+      <td>${fmtPct(t.fg_pct)}</td>
+      <td>${fmtPct(t.fg3_pct)}</td>
+      <td>${fmtPct(t.ft_pct)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:24px">Sin datos disponibles</td></tr>';
+
+  // Top cards
+  document.getElementById('topScorerCard').textContent = top.name || 'Sin datos';
+  document.getElementById('topScorerDetail').textContent = top.name 
+    ? `${fmt(top.pts)} PTS · ${fmt(top.reb)} REB · ${fmt(top.ast)} AST · ${fmtInt(top.games)} GP` 
+    : '—';
+
+  const rb = [...state.players].sort((a, b) => (b.reb || 0) - (a.reb || 0))[0] || {};
+  document.getElementById('topRebounderCard').textContent = rb.name || 'Sin datos';
+  document.getElementById('topRebounderDetail').textContent = rb.name 
+    ? `${fmt(rb.reb)} REB · ${fmt(rb.pts)} PTS · ${rb.team}` 
+    : '—';
+
+  const as = [...state.players].sort((a, b) => (b.ast || 0) - (a.ast || 0))[0] || {};
+  document.getElementById('topAssisterCard').textContent = as.name || 'Sin datos';
+  document.getElementById('topAssisterDetail').textContent = as.name 
+    ? `${fmt(as.ast)} AST · ${fmt(as.pts)} PTS · ${as.team}` 
+    : '—';
+
+  drawCharts();
+}
+
+function drawCharts() {
+  if (state.view !== 'compare') return;
+
+  const p = state.players.slice(0, 8);
+  const t = state.teams.slice(0, 8);
+
+  const chartColors = {
+    pts: '#10b981',
+    reb: '#f59e0b',
+    ast: '#3b82f6',
+    stl: '#a78bfa',
+    blk: '#f472b6'
+  };
+
+  if (playerChart) playerChart.destroy();
+  if (teamChart) teamChart.destroy();
+
+  playerChart = new Chart(document.getElementById('playerChart'), {
+    type: 'bar',
+    data: {
+      labels: p.map(x => x.name.split(' ').slice(-1)[0]),
+      datasets: [{
+        label: state.playerMetric.toUpperCase(),
+        data: p.map(x => x[state.playerMetric] || 0),
+        backgroundColor: chartColors[state.playerMetric] || '#10b981',
+        borderRadius: 8,
+        borderSkipped: false,
+        barThickness: 24
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1e28',
+          titleColor: '#e8eaed',
+          bodyColor: '#9ca3af',
+          borderColor: '#2a2f3d',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8
+        }
+      },
+      scales: {
+        x: { 
+          ticks: { color: '#6b7280', font: { size: 11, family: 'Inter' } }, 
+          grid: { display: false } 
+        },
+        y: { 
+          ticks: { color: '#6b7280', font: { size: 11 } }, 
+          grid: { color: '#1e222c' } 
+        }
+      }
+    }
+  });
+
+  teamChart = new Chart(document.getElementById('teamChart'), {
+    type: 'bar',
+    data: {
+      labels: t.map(x => x.name.split(' ').pop()),
+      datasets: [{
+        label: state.teamMetric.toUpperCase(),
+        data: t.map(x => x[state.teamMetric] || 0),
+        backgroundColor: '#3b82f6',
+        borderRadius: 8,
+        borderSkipped: false,
+        barThickness: 24
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1e28',
+          titleColor: '#e8eaed',
+          bodyColor: '#9ca3af',
+          borderColor: '#2a2f3d',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8
+        }
+      },
+      scales: {
+        x: { 
+          ticks: { color: '#6b7280', font: { size: 11, family: 'Inter' } }, 
+          grid: { display: false } 
+        },
+        y: { 
+          ticks: { color: '#6b7280', font: { size: 11 } }, 
+          grid: { color: '#1e222c' } 
+        }
+      }
+    }
+  });
+}
+
+async function loadData() {
+  if (state.loading) return;
+  state.loading = true;
+  setStatus('loading', 'Cargando datos de NBA...');
+  clearMessages();
+
+  try {
+    const health = await j(api.health);
+
+    const [pr, tr] = await Promise.all([
+      j(api.players).catch(e => ({ players: [], error: e.message, warning: 'Error cargando jugadores' })),
+      j(api.teams).catch(e => ({ teams: [], error: e.message, warning: 'Error cargando equipos' }))
+    ]);
+
+    state.players = pr.players || [];
+    state.teams = tr.teams || [];
+
+    // Detectar temporada real usada por el backend
+    if (pr.season) state.season = pr.season;
+    if (pr.seasonType) state.seasonType = pr.seasonType;
+    else if (tr.seasonType) state.seasonType = tr.seasonType;
+
+    const totalPlayers = state.players.length;
+    const totalTeams = state.teams.length;
+
+    if (totalPlayers === 0 && totalTeams === 0) {
+      setStatus('error', 'Sin datos disponibles');
+      showError('No se pudieron obtener datos de la NBA. La API puede estar en mantenimiento o la temporada no tiene datos públicos aún. Intenta recargar en unos minutos.');
+    } else {
+      let msg = `✓ ${totalPlayers} jugadores · ${totalTeams} equipos`;
+      if (pr.warning || tr.warning) {
+        msg += ' (con advertencias)';
+        showInfo((pr.warning || '') + ' ' + (tr.warning || ''));
+      }
+      if (state.seasonType === 'Playoffs') {
+        msg += ' · Playoffs';
+      }
+      setStatus('ok', msg);
+    }
+
+    // Populate team filter
+    const sel = document.getElementById('teamFilter');
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">Todos los equipos</option>';
+    [...new Set(state.players.map(x => x.team).filter(Boolean))].sort().forEach(t => {
+      sel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`);
+    });
+    if (currentVal) sel.value = currentVal;
+
+    render();
+  } catch (e) {
+    console.error(e);
+    setStatus('error', 'Error de conexión');
+    showError(`Error cargando datos: ${e.message}. Verifica que el servidor esté corriendo correctamente.`);
+  } finally {
+    state.loading = false;
+  }
+}
+
+function startAutoRefresh() {
+  // Auto refresh cada 5 minutos
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+  autoRefreshInterval = setInterval(() => {
+    if (!state.loading) loadData();
+  }, 5 * 60 * 1000);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadData();
+  startAutoRefresh();
+
+  document.querySelectorAll('.nav button').forEach(b => 
+    b.onclick = () => show(b.dataset.view));
+
+  document.getElementById('search').oninput = () => { render(); };
+  document.getElementById('teamFilter').onchange = () => { render(); };
+  document.getElementById('refreshBtn').onclick = () => { loadData(); };
+
+  document.querySelectorAll('[data-chart]').forEach(b => 
+    b.onclick = () => {
+      document.querySelectorAll('[data-chart]').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      state.playerMetric = b.dataset.chart;
+      drawCharts();
+    });
+
+  document.querySelectorAll('[data-chart-team]').forEach(b => 
+    b.onclick = () => {
+      document.querySelectorAll('[data-chart-team]').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      state.teamMetric = b.dataset.chartTeam;
+      drawCharts();
+    });
+});
+
+// Auto refresh cuando la pestaña vuelve a estar activa
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !state.loading) {
+    loadData();
+  }
+});
+</script>
+</body>
+</html>
