@@ -267,4 +267,52 @@ class BasketballReferenceScraper {
       stl: parseFloat(row.find('td[data-stat="stl_per_g"]').text()) || 0,
       blk: parseFloat(row.find('td[data-stat="blk_per_g"]').text()) || 0,
       tov: parseFloat(row.find('td[data-stat="tov_per_g"]').text()) || 0,
-      pf: parseFloat(row.find('td[data-stat="pf
+      pf: parseFloat(row.find('td[data-stat="pf_per_g"]').text()) || 0,
+      pts: parseFloat(row.find('td[data-stat="pts_per_g"]').text()) || 0
+    };
+  }
+
+  _extractAdvancedStats($, season) {
+    const row = $(`table#advanced tbody tr:has(th:contains("${season}-"))`);
+    if (!row.length) return null;
+
+    return {
+      per: parseFloat(row.find('td[data-stat="per"]').text()) || 0,
+      tsPct: parseFloat(row.find('td[data-stat="ts_pct"]').text()) || 0,
+      threePAr: parseFloat(row.find('td[data-stat="fg3a_per_fga_pct"]').text()) || 0,
+      ftr: parseFloat(row.find('td[data-stat="fta_per_fga_pct"]').text()) || 0,
+      orbPct: parseFloat(row.find('td[data-stat="orb_pct"]').text()) || 0,
+      drbPct: parseFloat(row.find('td[data-stat="drb_pct"]').text()) || 0,
+      trbPct: parseFloat(row.find('td[data-stat="trb_pct"]').text()) || 0,
+      astPct: parseFloat(row.find('td[data-stat="ast_pct"]').text()) || 0,
+      stlPct: parseFloat(row.find('td[data-stat="stl_pct"]').text()) || 0,
+      blkPct: parseFloat(row.find('td[data-stat="blk_pct"]').text()) || 0,
+      tovPct: parseFloat(row.find('td[data-stat="tov_pct"]').text()) || 0,
+      usgPct: parseFloat(row.find('td[data-stat="usg_pct"]').text()) || 0,
+      ows: parseFloat(row.find('td[data-stat="ows"]').text()) || 0,
+      dws: parseFloat(row.find('td[data-stat="dws"]').text()) || 0,
+      ws: parseFloat(row.find('td[data-stat="ws"]').text()) || 0,
+      ws48: parseFloat(row.find('td[data-stat="ws_per_48"]').text()) || 0,
+      obpm: parseFloat(row.find('td[data-stat="obpm"]').text()) || 0,
+      dbpm: parseFloat(row.find('td[data-stat="dbpm"]').text()) || 0,
+      bpm: parseFloat(row.find('td[data-stat="bpm"]').text()) || 0,
+      vorp: parseFloat(row.find('td[data-stat="vorp"]').text()) || 0
+    };
+  }
+
+  _calculateAverages(games) {
+    if (!games.length) return null;
+    
+    const stats = ['pts', 'trb', 'ast', 'stl', 'blk', 'tov', 'fgPct', 'threePct', 'ftPct'];
+    const averages = {};
+    
+    stats.forEach(stat => {
+      const sum = games.reduce((acc, g) => acc + (g[stat] || 0), 0);
+      averages[stat] = parseFloat((sum / games.length).toFixed(2));
+    });
+    
+    return averages;
+  }
+}
+
+module.exports = new BasketballReferenceScraper();
