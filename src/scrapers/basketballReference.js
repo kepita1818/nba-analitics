@@ -3,7 +3,6 @@ const cheerio = require('cheerio');
 const cacheService = require('../services/cacheService');
 
 const BASE_URL = 'https://www.basketball-reference.com';
-const BALLDONTLIE_URL = 'https://api.balldontlie.io/v1';
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -13,28 +12,36 @@ const HEADERS = {
   'Upgrade-Insecure-Requests': '1'
 };
 
-// Mapa de slugs BBR a IDs de balldontlie
+const NBA_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Origin': 'https://www.nba.com',
+  'Referer': 'https://www.nba.com/'
+};
+
+// Mapa de slugs BBR a IDs de NBA.com
 const PLAYER_ID_MAP = {
-  'jamesle01': 237,
-  'curryst01': 115,
-  'duranke01': 140,
-  'antetgi01': 15,
-  'jokicni01': 246,
-  'gilgesh01': 3547239,
-  'doncilu01': 132,
-  'tatumja01': 434,
-  'embiijo01': 145,
-  'bookede01': 57,
-  'lillada01': 278,
-  'morrisp01': 3547245,
-  'irvinky01': 228,
-  'paulch01': 367,
-  'georgpa01': 172,
-  'leonaka01': 274,
-  'hardeja01': 192,
-  'butleji01': 66,
-  'adebaba01': 4,
-  'davisbr01': 117
+  'jamesle01': 2544,
+  'curryst01': 201939,
+  'duranke01': 201142,
+  'antetgi01': 203507,
+  'jokicni01': 203999,
+  'gilgesh01': 1628983,
+  'doncilu01': 1629029,
+  'tatumja01': 1628369,
+  'embiijo01': 203954,
+  'bookede01': 1626164,
+  'lillada01': 203081,
+  'morrisp01': 1629008,
+  'irvinky01': 202681,
+  'paulch01': 101108,
+  'georgpa01': 202331,
+  'leonaka01': 202695,
+  'hardeja01': 201935,
+  'butleji01': 202710,
+  'adebaba01': 1628389,
+  'davisbr01': 203076
 };
 
 class BasketballReferenceScraper {
@@ -194,63 +201,73 @@ class BasketballReferenceScraper {
     }
   }
 
-  // ULTIMOS PARTIDOS - balldontlie API + fallback BBR
+  // ULTIMOS PARTIDOS - NBA.com API (gratuita y confiable)
   async getPlayerLastGames(playerSlug, numGames = 5) {
-    const cacheKey = `bdl_lastgames_${playerSlug}_${numGames}`;
+    const cacheKey = `nba_lastgames_${playerSlug}_${numGames}`;
     
     const cached = await cacheService.get(cacheKey);
     if (cached) return cached;
 
     const playerId = PLAYER_ID_MAP[playerSlug];
 
-    // Si tenemos ID de balldontlie, usamos la API
+    // Si tenemos ID de NBA.com, usamos su API
     if (playerId) {
       try {
-        const url = `${BALLDONTLIE_URL}/stats?player_ids[]=${playerId}&per_page=${numGames}&seasons[]=2025&postseason=true`;
+        const url = `https://stats.nba.com/stats/playergamelog?PlayerID=${playerId}&Season=2024-25&SeasonType=Playoffs`;
         
         const response = await axios.get(url, {
-          headers: { 'Authorization': '' },
+          headers: NBA_HEADERS,
           timeout: 15000
         });
 
-        const stats = response.data.data || [];
+        const resultSet = response.data.resultSets[0];
+        const headers = resultSet.headers;
+        const rows = resultSet.rowSet;
         
-        if (stats.length > 0) {
-          const games = stats.map((stat, index) => ({
+        // Tomar los últimos N partidos
+        const recentGames = rows.slice(-numGames).reverse();
+        
+        const games = recentGames.map((row, index) => {
+          const game = {};
+          headers.forEach((header, i) => {
+            game[header] = row[i];
+          });
+          
+          return {
             gameNum: index + 1,
-            date: stat.game?.date || '',
-            opponent: stat.game?.home_team_id === stat.team?.id ? 
-              `@ ${stat.game?.visitor_team?.abbreviation || ''}` : 
-              `vs ${stat.game?.home_team?.abbreviation || ''}`,
-            result: '',
-            mp: `${Math.floor(stat.min)}:${Math.round((stat.min % 1) * 60).toString().padStart(2, '0')}`,
-            fg: stat.fgm || 0,
-            fga: stat.fga || 0,
-            fgPct: stat.fga > 0 ? parseFloat(((stat.fgm / stat.fga) * 100).toFixed(1)) : 0,
-            threeP: stat.fg3m || 0,
-            threePA: stat.fg3a || 0,
-            threePct: stat.fg3a > 0 ? parseFloat(((stat.fg3m / stat.fg3a) * 100).toFixed(1)) : 0,
-            ft: stat.ftm || 0,
-            fta: stat.fta || 0,
-            ftPct: stat.fta > 0 ? parseFloat(((stat.ftm / stat.fta) * 100).toFixed(1)) : 0,
-            orb: stat.oreb || 0,
-            drb: stat.dreb || 0,
-            trb: stat.reb || 0,
-            ast: stat.ast || 0,
-            stl: stat.stl || 0,
-            blk: stat.blk || 0,
-            tov: stat.turnover || 0,
-            pf: stat.pf || 0,
-            pts: stat.pts || 0,
-            plusMinus: stat.plus_minus || ''
-          }));
+            date: game.GAME_DATE || '',
+            opponent: game.MATCHUP || '',
+            result: game.WL || '',
+            mp: game.MIN || 0,
+            fg: game.FGM || 0,
+            fga: game.FGA || 0,
+            fgPct: game.FGA > 0 ? parseFloat(((game.FGM / game.FGA) * 100).toFixed(1)) : 0,
+            threeP: game.FG3M || 0,
+            threePA: game.FG3A || 0,
+            threePct: game.FG3A > 0 ? parseFloat(((game.FG3M / game.FG3A) * 100).toFixed(1)) : 0,
+            ft: game.FTM || 0,
+            fta: game.FTA || 0,
+            ftPct: game.FTA > 0 ? parseFloat(((game.FTM / game.FTA) * 100).toFixed(1)) : 0,
+            orb: game.OREB || 0,
+            drb: game.DREB || 0,
+            trb: game.REB || 0,
+            ast: game.AST || 0,
+            stl: game.STL || 0,
+            blk: game.BLK || 0,
+            tov: game.TOV || 0,
+            pf: game.PF || 0,
+            pts: game.PTS || 0,
+            plusMinus: game.PLUS_MINUS || ''
+          };
+        });
 
+        if (games.length > 0) {
           const result = {
             player: playerSlug,
             lastGames: numGames,
             games,
             averages: this._calculateAverages(games),
-            source: 'balldontlie',
+            source: 'nba.com',
             scrapedAt: new Date().toISOString()
           };
 
@@ -258,7 +275,7 @@ class BasketballReferenceScraper {
           return result;
         }
       } catch (error) {
-        console.log(`balldontlie failed for ${playerSlug}, trying BBR fallback`);
+        console.log(`NBA.com failed for ${playerSlug}:`, error.message);
       }
     }
 
