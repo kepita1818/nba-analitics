@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: nba-stats-platform
-    env: python
-    buildCommand: pip install --upgrade pip setuptools wheel && pip install --only-binary=:all: -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT server:app
