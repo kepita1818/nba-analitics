@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: tipfactory-nba-api
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CACHE_TTL_MINUTES
+        value: 30
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true
