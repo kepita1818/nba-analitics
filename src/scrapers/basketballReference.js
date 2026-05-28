@@ -14,7 +14,7 @@ const HEADERS = {
 
 class BasketballReferenceScraper {
   
-  async getPlayerStats(playerSlug, season = '2025') {
+  async getPlayerStats(playerSlug, season = '2026') {
     const cacheKey = `bbr_player_${playerSlug}_${season}`;
     
     const cached = await cacheService.get(cacheKey);
@@ -55,7 +55,7 @@ class BasketballReferenceScraper {
     }
   }
 
-  async getSeasonLeaders(category = 'PTS', season = '2025') {
+  async getSeasonLeaders(category = 'PTS', season = '') {
     const cacheKey = `bbr_leaders_${category}_${season}`;
     
     const cached = await cacheService.get(cacheKey);
@@ -176,7 +176,7 @@ class BasketballReferenceScraper {
     if (cached) return cached;
 
     try {
-      const url = `${BASE_URL}/players/${playerSlug[0]}/${playerSlug}/gamelog/2025`;
+      const url = `${BASE_URL}/players/${playerSlug[0]}/${playerSlug}/gamelog/2026`;
       
       const response = await axios.get(url, { 
         headers: HEADERS,
