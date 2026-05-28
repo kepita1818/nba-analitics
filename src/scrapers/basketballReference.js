@@ -3,6 +3,7 @@ const cheerio = require('cheerio');
 const cacheService = require('../services/cacheService');
 
 const BASE_URL = 'https://www.basketball-reference.com';
+const BALLDONTLIE_URL = 'https://api.balldontlie.io/v1';
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -12,9 +13,33 @@ const HEADERS = {
   'Upgrade-Insecure-Requests': '1'
 };
 
+// Mapa de slugs BBR a IDs de balldontlie
+const PLAYER_ID_MAP = {
+  'jamesle01': 237,
+  'curryst01': 115,
+  'duranke01': 140,
+  'antetgi01': 15,
+  'jokicni01': 246,
+  'gilgesh01': 3547239,
+  'doncilu01': 132,
+  'tatumja01': 434,
+  'embiijo01': 145,
+  'bookede01': 57,
+  'lillada01': 278,
+  'morrisp01': 3547245,
+  'irvinky01': 228,
+  'paulch01': 367,
+  'georgpa01': 172,
+  'leonaka01': 274,
+  'hardeja01': 192,
+  'butleji01': 66,
+  'adebaba01': 4,
+  'davisbr01': 117
+};
+
 class BasketballReferenceScraper {
   
-  async getPlayerStats(playerSlug, season = '2026') {
+  async getPlayerStats(playerSlug, season = '2025') {
     const cacheKey = `bbr_player_${playerSlug}_${season}`;
     
     const cached = await cacheService.get(cacheKey);
@@ -55,7 +80,7 @@ class BasketballReferenceScraper {
     }
   }
 
-  async getSeasonLeaders(category = 'PTS', season = '') {
+  async getSeasonLeaders(category = 'PTS', season = '2025') {
     const cacheKey = `bbr_leaders_${category}_${season}`;
     
     const cached = await cacheService.get(cacheKey);
@@ -169,24 +194,124 @@ class BasketballReferenceScraper {
     }
   }
 
+  // ULTIMOS PARTIDOS - balldontlie API + fallback BBR
   async getPlayerLastGames(playerSlug, numGames = 5) {
-    const cacheKey = `bbr_lastgames_${playerSlug}_${numGames}`;
+    const cacheKey = `bdl_lastgames_${playerSlug}_${numGames}`;
     
     const cached = await cacheService.get(cacheKey);
     if (cached) return cached;
 
-    try {
-      const url = `${BASE_URL}/players/${playerSlug[0]}/${playerSlug}/gamelog/2026`;
-      
-      const response = await axios.get(url, { 
-        headers: HEADERS,
-        timeout: 15000 
-      });
+    const playerId = PLAYER_ID_MAP[playerSlug];
 
-      const $ = cheerio.load(response.data);
-      const games = [];
+    // Si tenemos ID de balldontlie, usamos la API
+    if (playerId) {
+      try {
+        const url = `${BALLDONTLIE_URL}/stats?player_ids[]=${playerId}&per_page=${numGames}&seasons[]=2025&postseason=true`;
+        
+        const response = await axios.get(url, {
+          headers: { 'Authorization': '' },
+          timeout: 15000
+        });
 
-      $('table#pgl_basic tbody tr').each((i, el) => {
+        const stats = response.data.data || [];
+        
+        if (stats.length > 0) {
+          const games = stats.map((stat, index) => ({
+            gameNum: index + 1,
+            date: stat.game?.date || '',
+            opponent: stat.game?.home_team_id === stat.team?.id ? 
+              `@ ${stat.game?.visitor_team?.abbreviation || ''}` : 
+              `vs ${stat.game?.home_team?.abbreviation || ''}`,
+            result: '',
+            mp: `${Math.floor(stat.min)}:${Math.round((stat.min % 1) * 60).toString().padStart(2, '0')}`,
+            fg: stat.fgm || 0,
+            fga: stat.fga || 0,
+            fgPct: stat.fga > 0 ? parseFloat(((stat.fgm / stat.fga) * 100).toFixed(1)) : 0,
+            threeP: stat.fg3m || 0,
+            threePA: stat.fg3a || 0,
+            threePct: stat.fg3a > 0 ? parseFloat(((stat.fg3m / stat.fg3a) * 100).toFixed(1)) : 0,
+            ft: stat.ftm || 0,
+            fta: stat.fta || 0,
+            ftPct: stat.fta > 0 ? parseFloat(((stat.ftm / stat.fta) * 100).toFixed(1)) : 0,
+            orb: stat.oreb || 0,
+            drb: stat.dreb || 0,
+            trb: stat.reb || 0,
+            ast: stat.ast || 0,
+            stl: stat.stl || 0,
+            blk: stat.blk || 0,
+            tov: stat.turnover || 0,
+            pf: stat.pf || 0,
+            pts: stat.pts || 0,
+            plusMinus: stat.plus_minus || ''
+          }));
+
+          const result = {
+            player: playerSlug,
+            lastGames: numGames,
+            games,
+            averages: this._calculateAverages(games),
+            source: 'balldontlie',
+            scrapedAt: new Date().toISOString()
+          };
+
+          await cacheService.set(cacheKey, result, 60);
+          return result;
+        }
+      } catch (error) {
+        console.log(`balldontlie failed for ${playerSlug}, trying BBR fallback`);
+      }
+    }
+
+    // Fallback a BBR scraping
+    return await this._fallbackScrapeLastGames(playerSlug, numGames);
+  }
+
+  async _fallbackScrapeLastGames(playerSlug, numGames) {
+    const seasons = ['2026', '2025', '2024'];
+    
+    for (const season of seasons) {
+      try {
+        const url = `${BASE_URL}/players/${playerSlug[0]}/${playerSlug}/gamelog/${season}`;
+        const response = await axios.get(url, { headers: HEADERS, timeout: 15000 });
+        const $ = cheerio.load(response.data);
+        const games = this._extractGamesFromTable($, numGames);
+        
+        if (games.length > 0) {
+          return {
+            player: playerSlug,
+            lastGames: numGames,
+            games,
+            averages: this._calculateAverages(games),
+            source: `bbr_${season}`,
+            scrapedAt: new Date().toISOString()
+          };
+        }
+      } catch (error) {
+        console.log(`BBR ${season} failed for ${playerSlug}`);
+      }
+    }
+
+    return {
+      player: playerSlug,
+      lastGames: numGames,
+      games: [],
+      averages: null,
+      source: 'none',
+      error: 'No game data found for any season',
+      scrapedAt: new Date().toISOString()
+    };
+  }
+
+  _extractGamesFromTable($, numGames) {
+    const games = [];
+    const selectors = [
+      'table#pgl_basic tbody tr',
+      'table#pgl_basic_playoffs tbody tr',
+      'table[id*="gamelog"] tbody tr'
+    ];
+    
+    for (const selector of selectors) {
+      $(selector).each((i, el) => {
         const $row = $(el);
         if ($row.hasClass('thead')) return;
         
@@ -199,8 +324,8 @@ class BasketballReferenceScraper {
           opponent: $row.find('td[data-stat="opp_id"] a').text().trim(),
           result: $row.find('td[data-stat="game_result"]').text().trim(),
           mp: $row.find('td[data-stat="mp"]').text().trim(),
-          fg: $row.find('td[data-stat="fg"]').text().trim(),
-          fga: $row.find('td[data-stat="fga"]').text().trim(),
+          fg: parseInt($row.find('td[data-stat="fg"]').text()) || 0,
+          fga: parseInt($row.find('td[data-stat="fga"]').text()) || 0,
           fgPct: parseFloat($row.find('td[data-stat="fg_pct"]').text()) || 0,
           threeP: parseInt($row.find('td[data-stat="fg3"]').text()) || 0,
           threePA: parseInt($row.find('td[data-stat="fg3a"]').text()) || 0,
@@ -220,21 +345,11 @@ class BasketballReferenceScraper {
           plusMinus: $row.find('td[data-stat="plus_minus"]').text().trim()
         });
       });
-
-      const result = {
-        player: playerSlug,
-        lastGames: numGames,
-        games,
-        averages: this._calculateAverages(games),
-        scrapedAt: new Date().toISOString()
-      };
-
-      await cacheService.set(cacheKey, result, 60);
-      return result;
-    } catch (error) {
-      console.error(`Error scraping last games:`, error.message);
-      return { error: error.message };
+      
+      if (games.length > 0) break;
     }
+    
+    return games;
   }
 
   _extractPerGameStats($, season) {
@@ -303,13 +418,24 @@ class BasketballReferenceScraper {
   _calculateAverages(games) {
     if (!games.length) return null;
     
-    const stats = ['pts', 'trb', 'ast', 'stl', 'blk', 'tov', 'fgPct', 'threePct', 'ftPct'];
+    const stats = ['pts', 'trb', 'ast', 'stl', 'blk', 'tov'];
     const averages = {};
     
     stats.forEach(stat => {
       const sum = games.reduce((acc, g) => acc + (g[stat] || 0), 0);
       averages[stat] = parseFloat((sum / games.length).toFixed(2));
     });
+    
+    const totalFg = games.reduce((acc, g) => acc + (g.fg || 0), 0);
+    const totalFga = games.reduce((acc, g) => acc + (g.fga || 0), 0);
+    const total3p = games.reduce((acc, g) => acc + (g.threeP || 0), 0);
+    const total3pa = games.reduce((acc, g) => acc + (g.threePA || 0), 0);
+    const totalFt = games.reduce((acc, g) => acc + (g.ft || 0), 0);
+    const totalFta = games.reduce((acc, g) => acc + (g.fta || 0), 0);
+    
+    averages.fgPct = totalFga > 0 ? parseFloat(((totalFg / totalFga) * 100).toFixed(1)) : 0;
+    averages.threePct = total3pa > 0 ? parseFloat(((total3p / total3pa) * 100).toFixed(1)) : 0;
+    averages.ftPct = totalFta > 0 ? parseFloat(((totalFt / totalFta) * 100).toFixed(1)) : 0;
     
     return averages;
   }
